@@ -1578,10 +1578,13 @@
 (define (parse-imports s word)
   (let* ((first (parse-import s word))
          (next  (peek-token s))
-         (from  (and (eq? next ':) (not (ts:space? s))))
+         (from  (and (eq? next ':) (not (ts:space? s))
+                     (or (not (and (pair? first) (eq? (car first) 'as)))
+                         (error (string "invalid syntax \"" word " " (deparse first) ":\"")))))
          (done  (cond ((or from (eqv? next #\,))
                        (begin (take-token s) #f))
-                      ((or (eq? next '|.|)
+                      ;; TODO: this seems to be wrong; figure out if it's needed
+                      #;((or (eq? next '|.|)
                            (eqv? (string.sub (string next) 0 1) ".")) #f)
                       (else #t)))
          (rest  (if done
@@ -1615,7 +1618,7 @@
           (else
            (cons (macrocall-to-atsym (parse-unary-prefix s)) l)))))
 
-(define (parse-import s word)
+(define (parse-import-path s word)
   (let loop ((path (parse-import-dots s)))
     (if (not (symbol-or-interpolate? (car path)))
         (error (string "invalid \"" word "\" statement: expected identifier")))
@@ -1634,6 +1637,16 @@
                     path)))
        (else
         (cons '|.| (reverse path)))))))
+
+(define (parse-import s word)
+  (let ((path (parse-import-path s word)))
+    (if (eq? (peek-token s) 'as)
+        (begin
+          (if (eq? word 'using)
+              (error "\"as\" can only be used with \"import\", not \"using\""))
+          (take-token s)
+          `(as ,path ,(parse-unary-prefix s)))
+        path)))
 
 ;; parse comma-separated assignments, like "i=1:n,j=1:m,..."
 (define (parse-comma-separated s what)
